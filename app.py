@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
-import os
 import folium
 from streamlit_folium import st_folium
 
@@ -162,32 +161,26 @@ Saat talteen:
 )
 
 # --------------------------------------------------
-# DATAN LUKEMINEN KANSIOSTA
+# DATAN LUKEMINEN GITHUBISTA
 # --------------------------------------------------
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-ACC_PATH = os.path.join(DATA_DIR, "Accelerometer.csv")  # Iso A ja L
-LOC_PATH = os.path.join(DATA_DIR, "Location.csv")
-
 st.sidebar.header("1. Data")
-st.sidebar.info(f"Luetaan dataa kansiosta:\n`{DATA_DIR}`")
 
-# Diagnostiikka
-if not os.path.exists(ACC_PATH):
-    st.sidebar.error(f"❌ accelerometer.csv puuttuu: {ACC_PATH}")
+# ✅ GitHub raw-URL:it
+ACC_URL = "https://raw.githubusercontent.com/LariLepisto/Fysiikan-loppuprojekti/main/data/Accelerometer.csv"
+LOC_URL = "https://raw.githubusercontent.com/LariLepisto/Fysiikan-loppuprojekti/main/data/Location.csv"
+
+st.sidebar.info("📥 Ladataan dataa GitHubista...")
+
+try:
+    df_acc = pd.read_csv(ACC_URL)
+    df_loc = pd.read_csv(LOC_URL)
+    st.sidebar.success("✅ Data ladattu onnistuneesti!")
+except Exception as e:
+    st.sidebar.error(f"❌ Datan lataaminen epäonnistui:\n{e}")
     st.stop()
-if not os.path.exists(LOC_PATH):
-    st.sidebar.error(f"❌ location.csv puuttuu: {LOC_PATH}")
-    st.stop()
 
-st.sidebar.success("✅ Molemmat tiedostot löytyi!")
-
-# Lue tiedostot
-df_acc = pd.read_csv(ACC_PATH)
-df_loc = pd.read_csv(LOC_PATH)
-
-# ✅ LISÄÄ TÄMÄ TÄSSÄ - heti datan lukemisen jälkeen
+# ✅ KOMPONENTIT MÄÄRITELLÄÄN HETI DATAN LUKEMISEN JÄLKEEN
 acc_components = {
     "X (m/s^2)": df_acc["X (m/s^2)"].values if "X (m/s^2)" in df_acc.columns else None,
     "Y (m/s^2)": df_acc["Y (m/s^2)"].values if "Y (m/s^2)" in df_acc.columns else None,
