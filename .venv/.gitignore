@@ -2,7 +2,7 @@
 # Python & Streamlit -projekti
 # -----------------------------
 
-# Virtuaaliympäristöt
+# Virtuaaliympäristöt – EI GITTIIN
 .venv/
 env/
 venv/
@@ -32,10 +32,11 @@ node_modules/
 *.log
 *.out
 
-# Analyysidatat
-data/*.csv
-!data/Accelerometer.csv
-!data/Location.csv
+# -----------------------------
+# DATA 
+# -----------------------------
+# 
+# ÄLÄ ignoreoi data/*.csv — opettaja tarvitsee nämä.
 
 # Mac
 .DS_Store

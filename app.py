@@ -4,8 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
 import os
+import folium
+from streamlit_folium import st_folium
 
-import pydeck as pdk  # vain karttaa varten, ei pakollinen jos et käytä
 
 # --------------------------------------------------
 # APUTOIMINNOT
@@ -16,7 +17,7 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=4):
     low = lowcut / nyq
     high = highcut / nyq
 
-    # varmistetaan, ettei rajataajuus mene yli Nyquistin
+    
     if high >= 1:
         high = 0.99
     if low <= 0:
@@ -28,7 +29,7 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=4):
 
 def haversine_distance(lat1, lon1, lat2, lon2):
     """
-    Laskee kahden pisteen välisen etäisyyden (metreinä) Haversine-kaavalla.
+    Laskee kahden pisteen välisen etäisyyden (metreinä).
     """
     R = 6371000.0  # Maapallon säde metreinä
     phi1 = np.radians(lat1)
@@ -44,7 +45,6 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 def compute_gps_distance_and_speed(df_loc):
     """
     Palauttaa (distance_m, avg_speed_m_s, total_time_s).
-    Käyttää joko Speed-saraketta tai laskee Haversine-kaavalla.
     """
     time = df_loc.iloc[:, 0].values  # oletus: ensimmäinen sarake on aika sekunteina
     total_time = time[-1] - time[0]
@@ -69,10 +69,18 @@ def compute_gps_distance_and_speed(df_loc):
 
     if speed_col is not None:
         # käytä nopeutta ja aikavälejä
-        speed = df_loc[speed_col].values  # m/s oletus
-        dt = np.diff(time)
-        # käytetään nopeutta edellisessä intervallissa
-        distance = np.sum(speed[:-1] * dt)
+        speed_values = df_loc[speed_col].dropna()
+        if len(speed_values) > 0:
+            speed = df_loc[speed_col].values  # m/s oletus
+            dt = np.diff(time)
+            # käytetään nopeutta edellisessä intervallissa
+            distance = np.sum(speed[:-1] * dt)
+        else:
+            lat = df_loc[lat_col].values
+            lon = df_loc[lon_col].values
+            # laske etäisyydet pisteiden välillä
+            dists = haversine_distance(lat[:-1], lon[:-1], lat[1:], lon[1:])
+            distance = np.sum(dists)
     elif lat_col is not None and lon_col is not None:
         lat = df_loc[lat_col].values
         lon = df_loc[lon_col].values
@@ -159,8 +167,8 @@ Saat talteen:
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
-ACC_PATH = os.path.join(DATA_DIR, "accelerometer.csv")
-LOC_PATH = os.path.join(DATA_DIR, "location.csv")
+ACC_PATH = os.path.join(DATA_DIR, "Accelerometer.csv")  # Iso A ja L
+LOC_PATH = os.path.join(DATA_DIR, "Location.csv")
 
 st.sidebar.header("1. Data")
 st.sidebar.info(f"Luetaan dataa kansiosta:\n`{DATA_DIR}`")
@@ -178,6 +186,13 @@ st.sidebar.success("✅ Molemmat tiedostot löytyi!")
 # Lue tiedostot
 df_acc = pd.read_csv(ACC_PATH)
 df_loc = pd.read_csv(LOC_PATH)
+
+# ✅ LISÄÄ TÄMÄ TÄSSÄ - heti datan lukemisen jälkeen
+acc_components = {
+    "X (m/s^2)": df_acc["X (m/s^2)"].values if "X (m/s^2)" in df_acc.columns else None,
+    "Y (m/s^2)": df_acc["Y (m/s^2)"].values if "Y (m/s^2)" in df_acc.columns else None,
+    "Z (m/s^2)": df_acc["Z (m/s^2)"].values if "Z (m/s^2)" in df_acc.columns else None,
+}
 
 st.sidebar.header("2. Asetukset")
 
@@ -356,27 +371,107 @@ else:
     st.info("FFT/PSD ei käytettävissä – liian vähän dataa?")
 
 # --------------------------------------------------
-# KARTTA
+# REITTI KARTALLA 
 # --------------------------------------------------
-
-st.subheader("Reitti kartalla")
-
-# etsitään latitude & longitude -sarakkeet
-lat_col = None
-lon_col = None
-for c in df_loc.columns:
-    cl = c.lower()
-    if "lat" in cl and lat_col is None:
-        lat_col = c
-    if "lon" in cl and lon_col is None:
-        lon_col = c
+st.subheader("Reittisi kartalla")
+lat_col = next((c for c in df_loc.columns if "lat" in c.lower()), None)
+lon_col = next((c for c in df_loc.columns if "lon" in c.lower() or "lng" in c.lower()), None)
 
 if lat_col is not None and lon_col is not None:
     route_df = pd.DataFrame({
-        "lat": df_loc[lat_col].values,
-        "lon": df_loc[lon_col].values
-    })
+        "lat": pd.to_numeric(df_loc[lat_col], errors="coerce"),
+        "lon": pd.to_numeric(df_loc[lon_col], errors="coerce")
+    }).dropna()
 
-    st.map(route_df)
+    if len(route_df) > 0:
+        # keskitä kartta reitin keskelle
+        center = [float(route_df["lat"].mean()), float(route_df["lon"].mean())]
+        m = folium.Map(location=center, zoom_start=15)
+
+        # piirrä reitti
+        folium.PolyLine(route_df[["lat", "lon"]].values.tolist(),
+                        color="blue", weight=4, opacity=0.7).add_to(m)
+
+        # start / end -markerit
+        folium.Marker(route_df[["lat", "lon"]].iloc[0].tolist(),
+                      popup="Start", icon=folium.Icon(color="green")).add_to(m)
+        folium.Marker(route_df[["lat", "lon"]].iloc[-1].tolist(),
+                      popup="End", icon=folium.Icon(color="red")).add_to(m)
+
+        # näytä folium-kartta streamlitissä
+        st_folium(m, width=700, height=450)
+    else:
+        st.info("GPS-sarakkeet löytyivät, mutta niissä ei ole numeerista dataa.")
 else:
-    st.info("GPS-datassa ei löytynyt latitude/longitude -sarakkeita, joten karttaa ei voi piirtää.")
+    st.info("GPS-datasta ei löytynyt latitude/longitude -sarakkeita.")
+
+# --------------------------------------------------
+# TULKINTA
+# --------------------------------------------------
+
+st.subheader("Tulkinta")
+st.write(f"""
+**Mitatut tulokset:**
+- **Askelmäärä (huiput):** {step_count_time} askelta
+- **Askelmäärä (FFT):** {step_count_fft:.1f} askelta (arvio)
+- **Kuljettu matka:** {distance_m/1000:.3f} km = {distance_m:.1f} m
+- **Keskinopeus:** {avg_speed_m_s:.2f} m/s
+- **Askelpituus:** {step_length_m:.2f} m
+
+**Arviointi:**
+- Keskimääräinen ihmisen askelpituus on 0,6-0,8 m, sinulla {step_length_m:.2f} m
+- Keskimääräinen kävelynopeus on 1,4 m/s, sinulla {avg_speed_m_s:.2f} m/s
+""")
+
+st.subheader("FFT-analyysi komponenteittain")
+
+fft_results = {}
+for comp_name, comp_data in acc_components.items():
+    if comp_data is not None:
+        acc_filt = butter_bandpass_filter(comp_data, lowcut, highcut, fs)
+        step_count_fft, _, _, dominant_freq = compute_steps_fft(
+            acc_filt, fs, fmin=min_step_freq, fmax=max_step_freq
+        )
+        fft_results[comp_name] = {
+            "steps": step_count_fft,
+            "freq": dominant_freq
+        }
+
+col1, col2, col3 = st.columns(3)
+for (comp_name, result), col in zip(fft_results.items(), [col1, col2, col3]):
+    with col:
+        if not np.isnan(result["steps"]):
+            st.metric(
+                f"{comp_name} FFT-askelmäärä",
+                f"{result['steps']:.1f}",
+                f"Taajuus: {result['freq']:.2f} Hz" if result["freq"] else "–"
+            )
+
+# --------------------------------------------------
+# ANALYYSI: KIIHTYVYYDEN KOMPONENTIN VERTAILU
+# --------------------------------------------------
+
+# ❌ POISTA tämä rivi (se on jo määritelty ylempää):
+# acc_components = { ... }
+
+# Laske askelmäärä jokaiselle komponentille
+peak_counts = {}
+for comp_name, comp_data in acc_components.items():
+    if comp_data is not None:
+        acc_filt = butter_bandpass_filter(comp_data, lowcut, highcut, fs)
+        peak_height = np.mean(acc_filt) + user_peak_height * np.std(acc_filt)
+        peaks = signal.find_peaks(acc_filt, height=peak_height, distance=int(fs/4))[0]
+        peak_counts[comp_name] = len(peaks)
+
+# Näytä vertailu
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("X-komponentin askelmäärä", peak_counts.get("X (m/s^2)", "–"))
+with col2:
+    st.metric("Y-komponentin askelmäärä", peak_counts.get("Y (m/s^2)", "–"))
+with col3:
+    st.metric("Z-komponentin askelmäärä", peak_counts.get("Z (m/s^2)", "–"))
+
+# Valitse paras komponentti
+best_component = max(peak_counts, key=peak_counts.get)
+st.info(f"✅ Paras komponentti: **{best_component}** ({peak_counts[best_component]} askelta)")
