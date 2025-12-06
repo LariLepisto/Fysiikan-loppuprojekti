@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
+import os
 
 import pydeck as pdk  # vain karttaa varten, ei pakollinen jos et käytä
 
@@ -152,9 +153,31 @@ Saat talteen:
 """
 )
 
-st.sidebar.header("1. Lataa data")
-acc_file = st.sidebar.file_uploader("Accelerometer.csv", type=["csv"])
-loc_file = st.sidebar.file_uploader("Location.csv", type=["csv"])
+# --------------------------------------------------
+# DATAN LUKEMINEN KANSIOSTA
+# --------------------------------------------------
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+ACC_PATH = os.path.join(DATA_DIR, "accelerometer.csv")
+LOC_PATH = os.path.join(DATA_DIR, "location.csv")
+
+st.sidebar.header("1. Data")
+st.sidebar.info(f"Luetaan dataa kansiosta:\n`{DATA_DIR}`")
+
+# Diagnostiikka
+if not os.path.exists(ACC_PATH):
+    st.sidebar.error(f"❌ accelerometer.csv puuttuu: {ACC_PATH}")
+    st.stop()
+if not os.path.exists(LOC_PATH):
+    st.sidebar.error(f"❌ location.csv puuttuu: {LOC_PATH}")
+    st.stop()
+
+st.sidebar.success("✅ Molemmat tiedostot löytyi!")
+
+# Lue tiedostot
+df_acc = pd.read_csv(ACC_PATH)
+df_loc = pd.read_csv(LOC_PATH)
 
 st.sidebar.header("2. Asetukset")
 
@@ -174,16 +197,9 @@ user_peak_height = st.sidebar.slider("Minimihuipun korkeus (relatiivinen)", 0.0,
 min_step_freq = st.sidebar.slider("Minimitaajuus [Hz] askelille (FFT)", 0.5, 4.0, 0.5, 0.1)
 max_step_freq = st.sidebar.slider("Maksimitaajuus [Hz] askelille (FFT)", 1.0, 6.0, 4.0, 0.1)
 
-if acc_file is None or loc_file is None:
-    st.info("Lataa sekä kiihtyvyys- että GPS-data vasemmalta, niin analyysi käynnistyy.")
-    st.stop()
-
 # --------------------------------------------------
-# DATAN LUKU
+# RAAKADATAN ESIKATSELU
 # --------------------------------------------------
-
-df_acc = pd.read_csv(acc_file)
-df_loc = pd.read_csv(loc_file)
 
 st.subheader("Raakadatan esikatselu")
 c1, c2 = st.columns(2)
