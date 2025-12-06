@@ -1,0 +1,44 @@
+# -----------------------------
+# Python & Streamlit -projekti
+# -----------------------------
+
+# Virtuaaliympäristöt
+.venv/
+env/
+venv/
+
+# Pythonin välimuistit
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# VSCode
+.vscode/
+
+# Streamlit metadata
+.streamlit/
+
+# OneDrive roskaa
+*~$
+*.tmp
+Thumbs.db
+Desktop.ini
+
+# Kehitystyökalujen kansiot
+node_modules/
+
+# Lokit ja muut väliaikaiset
+*.log
+*.out
+
+# Analyysidatat
+data/*.csv
+!data/Accelerometer.csv
+!data/Location.csv
+
+# Mac
+.DS_Store
+
+# Git itse
+.git/
